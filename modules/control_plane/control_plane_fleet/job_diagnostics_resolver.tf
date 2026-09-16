@@ -43,7 +43,6 @@ resource "aws_iam_role_policy" "job_diagnostics_resolver" {
         Effect = "Allow"
         Action = [
           "dynamodb:Query",
-          "dynamodb:UpdateItem",
         ]
         Resource = [
           aws_dynamodb_table.claims.arn,

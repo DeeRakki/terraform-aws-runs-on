@@ -628,30 +628,6 @@ function appendFleetClaimDiagnostics(response) {
   }
 }
 
-async function persistFleetWorkflowJobID(aws, tableName, claim, workflowJobID, diagnostics) {
-  const pk = trim(claim?.pk);
-  const sk = trim(claim?.sk);
-  if (!pk || !sk || !workflowJobID) return;
-  try {
-    await aws.updateItem({
-      TableName: tableName,
-      Key: {
-        pk: { S: pk },
-        sk: { S: sk },
-      },
-      UpdateExpression: 'SET workflow_job_id = if_not_exists(workflow_job_id, :workflow_job_id)',
-      ExpressionAttributeValues: {
-        ':workflow_job_id': { N: String(workflowJobID) },
-      },
-    });
-  } catch (error) {
-    diagnostics.push({
-      level: 'warn',
-      code: 'workflow_job_id_update_failed',
-      message: String(error?.message || error),
-    });
-  }
-}
 
 function observedDeliveries(record) {
   const deliveries = Array.isArray(record?.webhook_deliveries) ? record.webhook_deliveries : [];
@@ -832,7 +808,6 @@ async function resolveFleet(aws, facts, options) {
   }
   if (claim) {
     response.local = normalizeFleetClaim(claim);
-    await persistFleetWorkflowJobID(aws, tableName, claim, facts.workflow_job_id, response.diagnostics);
   } else if (response.github.workflow_job?.runner_name) {
     const instanceID = instanceIDFromRunnerName(response.github.workflow_job.runner_name);
     response.diagnostics.push({
