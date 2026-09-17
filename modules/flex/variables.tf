@@ -19,7 +19,7 @@ variable "stack_name" {
 }
 
 variable "environment" {
-  description = "Environment name used for resource tagging and RunsOn job filtering. RunsOn will only process jobs with an 'env' label matching this value. See https://runs-on.com/configuration/environments/ for details."
+  description = "Environment name used for resource tagging and RunsOn job filtering. RunsOn will only process jobs with an 'env' label matching this value. See https://runs-on.com/docs/control-plane/environments/ for details."
   type        = string
   default     = "production"
 }
