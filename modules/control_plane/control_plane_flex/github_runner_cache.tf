@@ -2,7 +2,7 @@
 
 resource "aws_cloudwatch_log_group" "github_runner_cache_refresh_lambda" {
   name              = "/runs-on/${var.stack_name}/lambda/github-runner-cache-refresh"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   tags = merge(
     local.common_tags,

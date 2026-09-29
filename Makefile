@@ -1,10 +1,4 @@
-VERSION ?= $(shell if [ -f ../VERSION ]; then tr -d '\n' < ../VERSION; elif [ -f VERSION ]; then tr -d '\n' < VERSION; elif git describe --tags --exact-match >/dev/null 2>&1; then git describe --tags --exact-match; else echo dev; fi)
-
-# Dev deploy config
-DEV_VPC_DIR = modules/flex/test/fixtures/vpc
-DEV_TFVARS = dev.tfvars
-DEV_STACK_NAME ?= runs-on-tf
-TEST_GO = cd modules/flex/test && mise exec -- go
+TEST_GO = cd modules/flex/test && mise exec go -- go
 TEST_WITH_CI_IMAGE = $(TEST_GO) run ./cmd/with-ci-image
 TEST_PLAN_LOCK_FILE ?= modules/flex/.terraform.lock.hcl
 TEST_PLAN_MIN_AWS_LOCK_FILE = testdata/provider-locks/aws-6.45/.terraform.lock.hcl
@@ -20,24 +14,22 @@ TEST_PLAN_TOFU_MODULES = \
 	modules/runner/compute \
 	modules/runner/extras \
 	modules/runner/network
-# Anchored so the whole plan-only suite (TestPlan*, including TestPlanSource*)
+# Anchored so the whole plan-only suite (TestPlan*)
 # runs in CI while integration tests in the same package stay excluded.
 TEST_PLAN_GO_PATTERN = ^TestPlan
 
 .PHONY: help init validate fmt fmt-check lint quick docs clean sync-metadata \
 	test test-plan test-plan-tofu test-plan-source test-plan-min-aws-provider \
-	test-basic test-private test-full test-integration test-short test-all \
-	test-basic-ci-image test-private-ci-image test-full-ci-image test-integration-ci-image \
-	dev-vpc dev-apply dev-destroy dev-output \
-	check
+	test-basic test-private test-full test-integration \
+	test-basic-ci-image test-private-ci-image test-full-ci-image test-integration-ci-image
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 init: ## Initialize OpenTofu
 	@echo "Initializing OpenTofu..."
-	@cd modules/flex && tofu init -upgrade
-	@cd modules/fleet && tofu init -upgrade
+	@cd modules/flex && tofu init
+	@cd modules/fleet && tofu init
 
 validate: ## Validate OpenTofu syntax
 	@echo "Validating OpenTofu..."
@@ -62,14 +54,14 @@ quick: fmt-check validate lint ## Run fast local checks
 
 docs: ## Regenerate root and module READMEs with terraform-docs
 	@echo "Generating documentation..."
-	@find modules -name main.tf -type f ! -path '*/internal/*' ! -path '*/.terraform/*' ! -path '*/examples/*' ! -path '*/test/*' | sort | while read file; do \
+	@find modules -name main.tf -type f ! -path '*/internal/*' ! -path '*/.terraform/*' ! -path '*/examples/*' ! -path '*/test/*' ! -path '*/tests/*' | sort | while read file; do \
 		dir=$$(dirname "$$file"); \
 		echo "Generating docs for $$dir"; \
 		(cd "$$dir" && terraform-docs --config "$(CURDIR)/.terraform-docs.yml" markdown table --output-file README.md .); \
 	done
 
 sync-metadata: ## Sync release-facing metadata from the monorepo root VERSION
-	@cd .. && mise exec -- go run ./cmd/releasectl metadata sync
+	@cd .. && mise exec go -- go run ./cmd/releasectl metadata sync
 
 test: test-plan ## Run plan-only tests
 
@@ -106,7 +98,7 @@ test-plan-tofu:
 		done
 
 test-plan-source:
-	@echo "Running Go source and structured plan checks..."
+	@echo "Running Go structured plan checks..."
 	@set -e; \
 		cache_dir="$${TF_PLUGIN_CACHE_DIR:-$(TEST_PLAN_PLUGIN_CACHE_DIR)}"; \
 		mkdir -p "$$cache_dir"; \
@@ -117,9 +109,14 @@ test-plan-source:
 test-plan-min-aws-provider: ## Run native plan tests against the minimum supported AWS provider
 	$(MAKE) test-plan-tofu TEST_PLAN_LOCK_FILE=$(TEST_PLAN_MIN_AWS_LOCK_FILE)
 
-test-basic: ## Run basic infrastructure scenario (~45min, requires AWS + RUNS_ON_LICENSE_KEY)
+# Live scenarios test only the harness package: in package-list mode (./...)
+# go test buffers each package's output until it exits, so a killed or timed
+# out run would print nothing. The CI targets (basic, integration) time out at
+# ~2.5x their slowest recent run; an interrupted run no longer leaks its stack
+# (see tools/terratest-janitor).
+test-basic: ## Run basic infrastructure scenario (~10min, requires AWS + RUNS_ON_LICENSE_KEY)
 	@echo "Running TestScenarioMatrix/basic..."
-	$(TEST_GO) test -v -timeout 45m -run "TestScenarioMatrix/basic" ./...
+	$(TEST_GO) test -v -timeout 25m -run "TestScenarioMatrix/basic" .
 
 test-basic-ci-image: ## Build/push a runs-on-ci image, export test vars, then run the basic scenario matrix case
 	@echo "Running TestScenarioMatrix/basic with a fresh runs-on-ci image..."
@@ -127,7 +124,7 @@ test-basic-ci-image: ## Build/push a runs-on-ci image, export test vars, then ru
 
 test-private: ## Run private networking scenario (~60min, requires NAT gateway)
 	@echo "Running TestScenarioMatrix/private..."
-	$(TEST_GO) test -v -timeout 60m -run "TestScenarioMatrix/private" ./...
+	$(TEST_GO) test -v -timeout 60m -run "TestScenarioMatrix/private" .
 
 test-private-ci-image: ## Build/push a runs-on-ci image, export test vars, then run the private scenario matrix case
 	@echo "Running TestScenarioMatrix/private with a fresh runs-on-ci image..."
@@ -135,73 +132,22 @@ test-private-ci-image: ## Build/push a runs-on-ci image, export test vars, then 
 
 test-full: ## Run full-featured scenario with EFS+ECR+NAT (~90min)
 	@echo "Running TestScenarioMatrix/full..."
-	$(TEST_GO) test -v -timeout 90m -run "TestScenarioMatrix/full" ./...
+	$(TEST_GO) test -v -timeout 90m -run "TestScenarioMatrix/full" .
 
 test-full-ci-image: ## Build/push a runs-on-ci image, export test vars, then run the full scenario matrix case
 	@echo "Running TestScenarioMatrix/full with a fresh runs-on-ci image..."
 	$(TEST_WITH_CI_IMAGE) --scenario full -- make -C terraform test-full
 
-test-integration: ## Run end-to-end integration test (~60min, requires GitHub App credentials)
+test-integration: ## Run end-to-end integration test (~10min, requires GitHub App credentials)
 	@echo "Running TestIntegrationEndToEnd..."
-	$(TEST_GO) test -v -timeout 60m -run "TestIntegrationEndToEnd" ./...
+	$(TEST_GO) test -v -timeout 30m -run "TestIntegrationEndToEnd" .
 
 test-integration-ci-image: ## Build/push a runs-on-ci image, export test vars, then run TestIntegrationEndToEnd
 	@echo "Running TestIntegrationEndToEnd with a fresh runs-on-ci image..."
 	$(TEST_WITH_CI_IMAGE) --scenario integration -- make -C terraform test-integration
-
-test-short: ## Run all tests, skip expensive NAT-dependent scenarios
-	@echo "Running short tests..."
-	$(TEST_GO) test -v -short -timeout 60m ./...
-
-test-all: ## Run all test scenarios (expensive, ~120min)
-	@echo "Running all test scenarios..."
-	$(TEST_GO) test -v -timeout 120m ./...
-
-dev-vpc: ## Deploy dev VPC (run once, then use dev-apply)
-	@echo "Deploying dev VPC (stack: $(DEV_STACK_NAME))..."
-	@cd $(DEV_VPC_DIR) && tofu init -upgrade && tofu apply -auto-approve \
-		-var="test_id=$(DEV_STACK_NAME)" \
-		-var="enable_nat=$$(grep -q 'private_mode' $(CURDIR)/$(DEV_TFVARS) 2>/dev/null && grep 'private_mode' $(CURDIR)/$(DEV_TFVARS) | grep -qv '"false"' && echo true || echo false)"
-	@echo ""
-	@echo "VPC ready. Now run: make dev-apply"
-
-dev-apply: ## Deploy RunsOn Flex on the dev VPC
-	@if [ ! -f "$(DEV_TFVARS)" ]; then \
-		echo "Error: $(DEV_TFVARS) not found."; \
-		echo "Copy dev.tfvars.example to dev.tfvars and fill in your values."; \
-		exit 1; \
-	fi
-	@echo "Deploying RunsOn Flex (stack: $$(grep stack_name $(DEV_TFVARS) | head -1 | sed 's/.*= *"\(.*\)"/\1/'))..."
-	@cd modules/flex && tofu init -upgrade
-	cd modules/flex && tofu apply \
-		-var-file="$(CURDIR)/$(DEV_TFVARS)" \
-		-var="vpc_id=$$(cd $(CURDIR)/$(DEV_VPC_DIR) && tofu output -raw vpc_id)" \
-		-var="public_subnet_ids=$$(cd $(CURDIR)/$(DEV_VPC_DIR) && tofu output -json public_subnets)" \
-		-var="private_subnet_ids=$$(cd $(CURDIR)/$(DEV_VPC_DIR) && tofu output -json private_subnets)"
-
-dev-destroy: ## Destroy RunsOn Flex and the dev VPC
-	@echo "Destroying RunsOn Flex..."
-	-cd modules/flex && tofu destroy \
-		-var-file="$(CURDIR)/$(DEV_TFVARS)" \
-		-var="vpc_id=$$(cd $(CURDIR)/$(DEV_VPC_DIR) && tofu output -raw vpc_id)" \
-		-var="public_subnet_ids=$$(cd $(CURDIR)/$(DEV_VPC_DIR) && tofu output -json public_subnets)" \
-		-var="private_subnet_ids=$$(cd $(CURDIR)/$(DEV_VPC_DIR) && tofu output -json private_subnets)"
-	@echo "Destroying dev VPC..."
-	cd $(DEV_VPC_DIR) && tofu destroy -auto-approve \
-		-var="test_id=$(DEV_STACK_NAME)"
-
-dev-output: ## Show dev deployment outputs
-	@cd modules/flex && tofu output
 
 clean: ## Remove local OpenTofu state and cache directories
 	@echo "Cleaning up..."
 	@find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.tfstate*" -delete 2>/dev/null || true
 	@find . -type f -name "tfplan" -delete 2>/dev/null || true
-
-check: ## Validate version format against root release tags
-	@if ! echo "$(VERSION)" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "Error: VERSION must be format vX.Y.Z (e.g., v2.12.1)"; \
-		exit 1; \
-	fi
-	@echo "Version $(VERSION) is valid"

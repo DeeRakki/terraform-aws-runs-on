@@ -152,6 +152,7 @@ variable "runtime" {
     otel_exporter_endpoint    = string
     otel_exporter_headers     = string
     otel_exporter_temporality = string
+    otel_resource_attributes  = optional(string, "")
     otel_logs_enabled         = bool
     otel_traces_enabled       = bool
     extra_env_vars            = map(string)

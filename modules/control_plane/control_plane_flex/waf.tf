@@ -44,7 +44,7 @@ resource "aws_wafv2_ip_set" "allowed_ips_ipv6" {
 resource "aws_cloudwatch_log_group" "github_waf_sync_lambda" {
   count             = local.using_managed_public_ingress_waf ? 1 : 0
   name              = "/runs-on/${var.stack_name}/lambda/github-waf-sync"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   tags = merge(
     local.common_tags,

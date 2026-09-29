@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.5.7"
+  # The `removed` block below needs Terraform or OpenTofu 1.7.
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {
@@ -122,6 +123,7 @@ locals {
     {
       Effect = "Allow"
       Action = [
+        "dynamodb:ConditionCheckItem",
         "dynamodb:DescribeTable",
         "dynamodb:DeleteItem",
         "dynamodb:GetItem",
@@ -160,6 +162,11 @@ locals {
       Resource = "arn:${local.partition}:ssm:${var.region}:${var.account_id}:parameter/${var.stack_name}/secrets/otel-exporter-headers"
     },
   ] : []
+}
+
+locals {
+  # Lambda logs never keep less than the previous fixed 14 days.
+  lambda_log_retention_days = max(14, local.runtime.log_retention_days)
 }
 
 data "aws_partition" "current" {}
@@ -335,6 +342,7 @@ module "runtime" {
             RUNS_ON_FLEET_HEARTBEAT_PATH        = "/tmp/runs-on-fleet-heartbeat"
             OTEL_EXPORTER_OTLP_ENDPOINT         = local.runtime.otel_exporter_endpoint
             OTEL_EXPORTER_OTLP_TEMPORALITY      = local.runtime.otel_exporter_temporality
+            OTEL_RESOURCE_ATTRIBUTES            = local.runtime.otel_resource_attributes
             OTEL_LOGS_ENABLED                   = local.runtime.otel_logs_enabled ? "true" : "false"
             OTEL_TRACES_ENABLED                 = local.runtime.otel_traces_enabled ? "true" : "false"
             # The SSM parameter ARN in `secrets` is stable across value

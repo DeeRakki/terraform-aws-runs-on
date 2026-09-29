@@ -115,6 +115,11 @@ function requestFacts(event) {
     workflow_run_id: numberValue(event?.workflow_run_id || fromURL.workflow_run_id),
     workflow_job_id: numberValue(event?.workflow_job_id || fromURL.workflow_job_id),
     include_delivery_metadata: event?.include_delivery_metadata !== false,
+    // Repeat polls from a caller that already holds the GitHub workflow job
+    // and run skip GitHub. runner_name is the cached job's runner, which Fleet
+    // still needs to match claims.
+    github_cached: event?.github_cached === true,
+    runner_name: trim(event?.runner_name),
   };
 }
 
@@ -717,6 +722,10 @@ async function resolveFlex(aws, facts, options) {
 
   const record = await getFlexRecord(aws, tableName, facts.workflow_job_id);
   response.local = normalizeFlexRecord(record);
+  if (facts.github_cached) {
+    response.status = response.local ? 'found' : 'not_found';
+    return response;
+  }
 
   const githubSecret = await loadSecretJSON(aws, githubAppsSecretARN, 'github apps config');
   const credentials = appCredentialsFromFlexSecret(githubSecret);
@@ -786,15 +795,21 @@ async function resolveFleet(aws, facts, options) {
   }
   const installationID = credentials.type === 'app' ? installation.installationID : 0;
 
-  try {
-    response.github.workflow_job = normalizeWorkflowJob(
-      await githubClient.getWorkflowJob(credentials, facts.owner, facts.repo, facts.workflow_job_id, installationID),
-    );
-  } catch (error) {
-    response.diagnostics.push(githubFetchDiagnostic('github_workflow_job_fetch', error, credentials, facts.owner, facts.repo, 'workflow job', facts.workflow_job_id));
+  // Claim matching keys on the job's runner, so a cached poll fetches the job
+  // again only until GitHub has reported one.
+  let workflowJob = facts.github_cached && facts.runner_name ? { runner_name: facts.runner_name } : null;
+  if (!workflowJob) {
+    try {
+      workflowJob = normalizeWorkflowJob(
+        await githubClient.getWorkflowJob(credentials, facts.owner, facts.repo, facts.workflow_job_id, installationID),
+      );
+      response.github.workflow_job = workflowJob;
+    } catch (error) {
+      response.diagnostics.push(githubFetchDiagnostic('github_workflow_job_fetch', error, credentials, facts.owner, facts.repo, 'workflow job', facts.workflow_job_id));
+    }
   }
 
-  const { claim, ambiguous, matchBasis, exactMatchCount } = chooseFleetClaim(claims, response.github.workflow_job);
+  const { claim, ambiguous, matchBasis, exactMatchCount } = chooseFleetClaim(claims, workflowJob);
   response.fleet = {
     claim_count: claims.length,
     exact_match_count: exactMatchCount,
@@ -808,21 +823,23 @@ async function resolveFleet(aws, facts, options) {
   }
   if (claim) {
     response.local = normalizeFleetClaim(claim);
-  } else if (response.github.workflow_job?.runner_name) {
-    const instanceID = instanceIDFromRunnerName(response.github.workflow_job.runner_name);
+  } else if (workflowJob?.runner_name) {
+    const instanceID = instanceIDFromRunnerName(workflowJob.runner_name);
     response.diagnostics.push({
       level: 'warn',
       code: 'fleet_claim_missing_for_runner',
-      message: `no Fleet claim matched runner ${response.github.workflow_job.runner_name}${instanceID ? ` (${instanceID})` : ''}`,
+      message: `no Fleet claim matched runner ${workflowJob.runner_name}${instanceID ? ` (${instanceID})` : ''}`,
     });
   }
 
-  try {
-    response.github.workflow_run = normalizeWorkflowRun(
-      await githubClient.getWorkflowRun(credentials, facts.owner, facts.repo, facts.workflow_run_id, installationID),
-    );
-  } catch (error) {
-    response.diagnostics.push(githubFetchDiagnostic('github_workflow_run_fetch', error, credentials, facts.owner, facts.repo, 'workflow run', facts.workflow_run_id));
+  if (!facts.github_cached) {
+    try {
+      response.github.workflow_run = normalizeWorkflowRun(
+        await githubClient.getWorkflowRun(credentials, facts.owner, facts.repo, facts.workflow_run_id, installationID),
+      );
+    } catch (error) {
+      response.diagnostics.push(githubFetchDiagnostic('github_workflow_run_fetch', error, credentials, facts.owner, facts.repo, 'workflow run', facts.workflow_run_id));
+    }
   }
 
   response.github.deliveries = [];

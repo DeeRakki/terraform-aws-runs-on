@@ -55,14 +55,9 @@ func TestIntegrationEndToEnd(t *testing.T) {
 	}
 
 	cfg := integrationScenarioConfigFromEnv(t)
-	if strings.HasSuffix(testWorkflow, "terraform-integration-runner.yml") || strings.HasSuffix(testWorkflow, "e2e-environments.yml") {
+	if strings.HasSuffix(testWorkflow, "terraform-integration-runner.yml") {
 		if _, ok := testWorkflowInputs["stack_env"]; !ok {
 			testWorkflowInputs["stack_env"] = cfg.Environment
-		}
-	}
-	if strings.HasSuffix(testWorkflow, "e2e-environments.yml") {
-		if _, ok := testWorkflowInputs["product"]; !ok {
-			testWorkflowInputs["product"] = "flex"
 		}
 	}
 
@@ -100,9 +95,8 @@ func TestIntegrationEndToEnd(t *testing.T) {
 	t.Logf("Workflow dispatched successfully")
 
 	// 4. Monitor execution
-	testID := GetTestID()
 	stackEnv, _ := testWorkflowInputs["stack_env"].(string)
-	runID, err := WatchForWorkflowRun(t, client, testRepo, testWorkflow, testID, stackEnv, testWorkflowRef, startTime, 5*time.Minute)
+	runID, err := WatchForWorkflowRun(t, client, testRepo, testWorkflow, stackEnv, testWorkflowRef, startTime, 5*time.Minute)
 	require.NoError(t, err, "Workflow run not found after dispatch")
 
 	// Fresh ephemeral stacks can rely on repo discovery before webhook-delivered
@@ -162,7 +156,7 @@ func TestIntegrationEndToEnd(t *testing.T) {
 			if _, ok := requiredChecks[check.Name]; !ok {
 				continue
 			}
-			if check.Status != "✅" {
+			if check.Status != "pass" {
 				return fmt.Errorf("doctor check %q was %s", check.Name, check.Status)
 			}
 			requiredChecks[check.Name] = true

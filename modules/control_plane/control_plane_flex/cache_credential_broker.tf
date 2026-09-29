@@ -1,6 +1,6 @@
 resource "aws_cloudwatch_log_group" "cache_credential_broker_lambda" {
   name              = "/aws/lambda/${var.stack_name}-cache-broker"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   tags = merge(
     local.common_tags,

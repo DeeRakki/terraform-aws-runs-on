@@ -22,7 +22,7 @@ Public module source:
 ```hcl
 module "runs_on_fleet" {
   source  = "runs-on/runs-on/aws//modules/fleet"
-  version = "v3.3.2"
+  version = "v3.4.0"
 }
 ```
 
@@ -84,7 +84,7 @@ Create `main.tf`:
 
 ```hcl
 terraform {
-  required_version = ">= 1.5.7"
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {
@@ -165,7 +165,7 @@ locals {
 
 module "runs_on_fleet" {
   source  = "runs-on/runs-on/aws//modules/fleet"
-  version = "v3.3.2"
+  version = "v3.4.0"
 
   stack_name             = var.stack_name
   github_enterprise_pat  = var.github_enterprise_pat
@@ -384,7 +384,7 @@ You can also create the rule outside the module with `aws_ecr_pull_through_cache
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.7.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.45 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.7 |
 
@@ -424,7 +424,7 @@ You can also create the rule outside the module with `aws_ecr_pull_through_cache
 | <a name="input_alert_slack_webhook_url"></a> [alert\_slack\_webhook\_url](#input\_alert\_slack\_webhook\_url) | Slack webhook URL for alert notifications (optional) | `string` | `""` | no |
 | <a name="input_app_capacity_provider"></a> [app\_capacity\_provider](#input\_app\_capacity\_provider) | Fargate capacity provider for the Fleet worker service. Use fargate\_spot to lower idle cost for small installs; interrupted in-flight assigned jobs are reconciled by the Fleet runtime. | `string` | `"fargate"` | no |
 | <a name="input_app_size"></a> [app\_size](#input\_app\_size) | Preset for the Fleet worker service, default EC2 launch concurrency, and default registration concurrency. Allowed values: small, medium, high, xhigh. | `string` | `"small"` | no |
-| <a name="input_app_tag"></a> [app\_tag](#input\_app\_tag) | Application/agent tag published into the cache bucket and passed to runners. Passing null falls back to the default, which release publication pins to the released version. | `string` | `"v3.3.2"` | no |
+| <a name="input_app_tag"></a> [app\_tag](#input\_app\_tag) | Application/agent tag published into the cache bucket and passed to runners. Passing null falls back to the default, which release publication pins to the released version. | `string` | `"v3.4.0-rc.1"` | no |
 | <a name="input_bootstrap_tag"></a> [bootstrap\_tag](#input\_bootstrap\_tag) | Bootstrap release tag used by the shared compute bootstrap template. | `string` | `"v0.1.17"` | no |
 | <a name="input_cache_bucket_namespace"></a> [cache\_bucket\_namespace](#input\_cache\_bucket\_namespace) | S3 namespace for the cache bucket. Use account-regional when an organization SCP requires account-regional S3 bucket names. | `string` | `"global"` | no |
 | <a name="input_cache_bucket_versioning_enabled"></a> [cache\_bucket\_versioning\_enabled](#input\_cache\_bucket\_versioning\_enabled) | Enable S3 object versioning for the cache bucket. | `bool` | `false` | no |
@@ -446,12 +446,13 @@ You can also create the rule outside the module with `aws_ecr_pull_through_cache
 | <a name="input_images"></a> [images](#input\_images) | Custom runner image catalog keyed by image name. Built-in image names such as ubuntu24-full-x64 and ubuntu26-full-x64 do not need entries here. | `any` | `{}` | no |
 | <a name="input_integration_step_security_api_key"></a> [integration\_step\_security\_api\_key](#input\_integration\_step\_security\_api\_key) | API key for StepSecurity integration (optional). | `string` | `""` | no |
 | <a name="input_ipv6_enabled"></a> [ipv6\_enabled](#input\_ipv6\_enabled) | Enable IPv6 on EC2 runner launch templates. | `bool` | `false` | no |
-| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch Logs retention in days. | `number` | `7` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | CloudWatch Logs retention in days. Control-plane Lambda logs keep at least 14 days. | `number` | `7` | no |
 | <a name="input_maintenance_mode"></a> [maintenance\_mode](#input\_maintenance\_mode) | Enable maintenance mode (disables queue processing and leader election) | `bool` | `false` | no |
 | <a name="input_otel_exporter_endpoint"></a> [otel\_exporter\_endpoint](#input\_otel\_exporter\_endpoint) | OpenTelemetry exporter endpoint for observability (optional) | `string` | `""` | no |
 | <a name="input_otel_exporter_headers"></a> [otel\_exporter\_headers](#input\_otel\_exporter\_headers) | OpenTelemetry exporter headers (optional) | `string` | `""` | no |
 | <a name="input_otel_exporter_temporality"></a> [otel\_exporter\_temporality](#input\_otel\_exporter\_temporality) | OTLP metrics temporality: cumulative (default) or delta | `string` | `"cumulative"` | no |
 | <a name="input_otel_logs_enabled"></a> [otel\_logs\_enabled](#input\_otel\_logs\_enabled) | Enable OpenTelemetry log export | `bool` | `true` | no |
+| <a name="input_otel_resource_attributes"></a> [otel\_resource\_attributes](#input\_otel\_resource\_attributes) | Extra OTLP resource attributes as comma-separated key=value pairs, set as OTEL\_RESOURCE\_ATTRIBUTES. They override RunsOn defaults such as deployment.environment, except service.name. (optional) | `string` | `""` | no |
 | <a name="input_otel_traces_enabled"></a> [otel\_traces\_enabled](#input\_otel\_traces\_enabled) | Enable OpenTelemetry trace export | `bool` | `true` | no |
 | <a name="input_permission_boundary_arn"></a> [permission\_boundary\_arn](#input\_permission\_boundary\_arn) | Optional IAM permission boundary ARN applied to created roles. | `string` | `""` | no |
 | <a name="input_private_mode"></a> [private\_mode](#input\_private\_mode) | Private networking mode: false, true, always, or only. | `string` | `"false"` | no |
@@ -460,7 +461,7 @@ You can also create the rule outside the module with `aws_ecr_pull_through_cache
 | <a name="input_runner_custom_policy_arns"></a> [runner\_custom\_policy\_arns](#input\_runner\_custom\_policy\_arns) | Optional managed policy ARNs attached to the EC2 runner role. Use this when policy ARNs are computed by other resources. | `list(string)` | `[]` | no |
 | <a name="input_runner_custom_tags"></a> [runner\_custom\_tags](#input\_runner\_custom\_tags) | Additional custom tags propagated to launched runner instances. | `list(string)` | `[]` | no |
 | <a name="input_runner_max_runtime"></a> [runner\_max\_runtime](#input\_runner\_max\_runtime) | Maximum runtime in minutes passed to the shared compute bootstrap template. | `number` | `60` | no |
-| <a name="input_runtime_image"></a> [runtime\_image](#input\_runtime\_image) | RunsOn worker image containing the fleetd binary. Override with a runs-on-ci image for live validation. Passing null falls back to the default, which release publication pins to the released image. | `string` | `"public.ecr.aws/c5h5o9k1/runs-on/runs-on:v3.3.2@sha256:53df89ebc3396f87b88790807fe6be04b01242bad0c52122fab9795690d18533"` | no |
+| <a name="input_runtime_image"></a> [runtime\_image](#input\_runtime\_image) | RunsOn worker image containing the fleetd binary. Override with a runs-on-ci image for live validation. Passing null falls back to the default, which release publication pins to the released image. | `string` | `"public.ecr.aws/c5h5o9k1/runs-on/runs-on:v3.4.0-rc.1@sha256:7d50486efc409a994defd1edbe02345667f78c7bd8b77cf0d7eb2885e2e70726"` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security group IDs for runners and the Fleet worker. Leave empty to create a dedicated group. | `list(string)` | `[]` | no |
 | <a name="input_spot_circuit_breaker"></a> [spot\_circuit\_breaker](#input\_spot\_circuit\_breaker) | Spot circuit breaker for Fleet launches, formatted as COUNT/WINDOW\_MINUTES/RECOVERY\_MINUTES: after COUNT spot interruptions within WINDOW\_MINUTES, launch on-demand for RECOVERY\_MINUTES. "false" disables it; empty uses the built-in default "2/15/30" (same semantics as the Flex SpotCircuitBreaker stack parameter). | `string` | `""` | no |
 | <a name="input_ssh_allowed"></a> [ssh\_allowed](#input\_ssh\_allowed) | Allow SSH ingress when the module creates its own security group. | `bool` | `false` | no |

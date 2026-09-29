@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.5.7"
+  # control_plane_fleet uses a `removed` block, which needs Terraform or OpenTofu 1.7.
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {

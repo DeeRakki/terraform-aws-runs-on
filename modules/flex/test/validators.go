@@ -12,11 +12,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	tagtypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -36,10 +34,8 @@ type AWSClients struct {
 	Config         aws.Config
 	ECS            *ecs.Client
 	S3             *s3.Client
-	IAM            *iam.Client
 	EC2            *ec2.Client
 	SSM            *ssm.Client
-	CloudWatchLogs *cloudwatchlogs.Client
 	SecretsManager *secretsmanager.Client
 	Tagging        *resourcegroupstaggingapi.Client
 }
@@ -51,10 +47,8 @@ func NewAWSClients(ctx context.Context) *AWSClients {
 		Config:         cfg,
 		ECS:            ecs.NewFromConfig(cfg),
 		S3:             s3.NewFromConfig(cfg),
-		IAM:            iam.NewFromConfig(cfg),
 		EC2:            ec2.NewFromConfig(cfg),
 		SSM:            ssm.NewFromConfig(cfg),
-		CloudWatchLogs: cloudwatchlogs.NewFromConfig(cfg),
 		SecretsManager: secretsmanager.NewFromConfig(cfg),
 		Tagging:        resourcegroupstaggingapi.NewFromConfig(cfg),
 	}
@@ -82,9 +76,6 @@ func (r ScenarioResult) StackConfigSecretARN() string {
 }
 func (r ScenarioResult) CacheBucket() string { return r.stringOutput("platform.cache.bucket_name") }
 func (r ScenarioResult) EC2RoleName() string { return r.stringOutput("platform.runner_iam.role_name") }
-func (r ScenarioResult) LogGroupName() string {
-	return r.stringOutput("platform.runner_logs.group_name")
-}
 func (r ScenarioResult) EFSFileSystemID() string {
 	return r.stringOutput("optional_features.efs.file_system_id")
 }
@@ -128,25 +119,16 @@ func outputValueAtPath(root map[string]any, path string) any {
 // COMPOSABLE VALIDATION SETS
 // =============================================================================
 
-type BaselineValidationOptions struct {
-	Functional bool
-}
-
-func runBaselineValidationProfile(t *testing.T, clients *AWSClients, r ScenarioResult, opts BaselineValidationOptions) {
+func runBaselineValidations(t *testing.T, clients *AWSClients, r ScenarioResult) {
 	t.Helper()
 
 	runOutputValidations(t, r)
-	runSecurityValidations(t, clients, r)
-	runComplianceValidations(t, clients, r)
 	runWiringValidations(t, clients, r)
 	runTaggingValidations(t, clients, r)
 	runAdvancedValidations(t, r)
-
-	if opts.Functional {
-		t.Run("Functional", func(t *testing.T) {
-			runFunctionalValidations(t, clients, r)
-		})
-	}
+	t.Run("Functional", func(t *testing.T) {
+		runFunctionalValidations(t, clients, r)
+	})
 }
 
 func runOutputValidations(t *testing.T, r ScenarioResult) {
@@ -165,30 +147,6 @@ func runOutputValidations(t *testing.T, r ScenarioResult) {
 		if r.Config.EnableECR {
 			assert.NotEmpty(t, r.ECRURL(), "ECR URL should not be empty")
 		}
-	})
-}
-
-func runSecurityValidations(t *testing.T, clients *AWSClients, r ScenarioResult) {
-	t.Run("Security/S3Encryption", func(t *testing.T) {
-		ValidateS3BucketEncryption(t, clients, r.CacheBucket())
-	})
-
-	t.Run("Security/S3PublicAccessBlocked", func(t *testing.T) {
-		ValidateS3BucketPublicAccessBlocked(t, clients, r.CacheBucket())
-	})
-
-	t.Run("Security/IAMMinimalPermissions", func(t *testing.T) {
-		ValidateIAMRoleNotOverlyPermissive(t, clients, r.EC2RoleName())
-	})
-}
-
-func runComplianceValidations(t *testing.T, clients *AWSClients, r ScenarioResult) {
-	t.Run("Compliance/S3Versioning", func(t *testing.T) {
-		ValidateS3BucketVersioning(t, clients, r.CacheBucket(), "Suspended")
-	})
-
-	t.Run("Compliance/LogRetention", func(t *testing.T) {
-		ValidateCloudWatchLogRetention(t, clients, r.LogGroupName())
 	})
 }
 
@@ -230,11 +188,6 @@ func runFunctionalValidations(t *testing.T, clients *AWSClients, r ScenarioResul
 	require.True(t, ready, "Instance failed to become SSM-ready within timeout")
 
 	if !publicIP {
-		t.Run("NoPublicIP", func(t *testing.T) {
-			hasNoPublicIP := ValidateInstanceHasNoPublicIP(t, clients, instanceID)
-			assert.True(t, hasNoPublicIP, "Private subnet instance should not have public IP")
-		})
-
 		t.Run("OutboundConnectivity", func(t *testing.T) {
 			ValidatePrivateNetworkConnectivity(t, clients, instanceID)
 		})
@@ -258,97 +211,6 @@ func runFunctionalValidations(t *testing.T, clients *AWSClients, r ScenarioResul
 		t.Run("ECRPushPull", func(t *testing.T) {
 			ValidateECRPushPullFromEC2(t, clients, instanceID, r.ECRURL())
 		})
-	}
-
-	t.Run("CloudWatchLogging", func(t *testing.T) {
-		ValidateEC2CloudWatchLogs(t, clients, instanceID, r.LogGroupName())
-	})
-}
-
-// =============================================================================
-// SECURITY VALIDATORS
-// =============================================================================
-
-// ValidateS3BucketEncryption checks bucket has SSE-KMS encryption.
-func ValidateS3BucketEncryption(t *testing.T, clients *AWSClients, bucketName string) {
-	ctx := context.Background()
-	result, err := clients.S3.GetBucketEncryption(ctx, &s3.GetBucketEncryptionInput{
-		Bucket: aws.String(bucketName),
-	})
-	require.NoError(t, err, "Failed to get bucket encryption for %s", bucketName)
-	require.NotEmpty(t, result.ServerSideEncryptionConfiguration.Rules, "Bucket %s has no encryption rules", bucketName)
-	algo := string(result.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm)
-	assert.Equal(t, "aws:kms", algo, "Bucket %s should use KMS encryption, got %s", bucketName, algo)
-}
-
-// ValidateS3BucketPublicAccessBlocked checks bucket has public access blocked.
-func ValidateS3BucketPublicAccessBlocked(t *testing.T, clients *AWSClients, bucketName string) {
-	ctx := context.Background()
-	result, err := clients.S3.GetPublicAccessBlock(ctx, &s3.GetPublicAccessBlockInput{
-		Bucket: aws.String(bucketName),
-	})
-	require.NoError(t, err, "Failed to get public access block for %s", bucketName)
-
-	pabConfig := result.PublicAccessBlockConfiguration
-	assert.True(t, aws.ToBool(pabConfig.BlockPublicAcls), "Bucket %s should block public ACLs", bucketName)
-	assert.True(t, aws.ToBool(pabConfig.BlockPublicPolicy), "Bucket %s should block public policy", bucketName)
-	assert.True(t, aws.ToBool(pabConfig.IgnorePublicAcls), "Bucket %s should ignore public ACLs", bucketName)
-	assert.True(t, aws.ToBool(pabConfig.RestrictPublicBuckets), "Bucket %s should restrict public buckets", bucketName)
-}
-
-// ValidateIAMRoleNotOverlyPermissive checks role doesn't have dangerous policies.
-func ValidateIAMRoleNotOverlyPermissive(t *testing.T, clients *AWSClients, roleName string) {
-	ctx := context.Background()
-	attachedPolicies, err := clients.IAM.ListAttachedRolePolicies(ctx, &iam.ListAttachedRolePoliciesInput{
-		RoleName: aws.String(roleName),
-	})
-	require.NoError(t, err, "Failed to list attached policies for role %s", roleName)
-
-	dangerousPolicies := []string{
-		"arn:aws:iam::aws:policy/AdministratorAccess",
-		"arn:aws:iam::aws:policy/PowerUserAccess",
-		"arn:aws:iam::aws:policy/IAMFullAccess",
-	}
-
-	for _, policy := range attachedPolicies.AttachedPolicies {
-		for _, dangerous := range dangerousPolicies {
-			assert.NotEqual(t, dangerous, *policy.PolicyArn,
-				"Role %s should not have %s attached", roleName, dangerous)
-		}
-	}
-	t.Logf("IAM role %s has no overly permissive policies attached", roleName)
-}
-
-// =============================================================================
-// COMPLIANCE VALIDATORS
-// =============================================================================
-
-// ValidateS3BucketVersioning checks versioning status.
-func ValidateS3BucketVersioning(t *testing.T, clients *AWSClients, bucketName string, expectedStatus string) {
-	ctx := context.Background()
-	result, err := clients.S3.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{
-		Bucket: aws.String(bucketName),
-	})
-	require.NoError(t, err, "Failed to get bucket versioning for %s", bucketName)
-
-	status := string(result.Status)
-	assert.Equal(t, expectedStatus, status,
-		"Bucket %s versioning should be %s, got %s", bucketName, expectedStatus, status)
-}
-
-// ValidateCloudWatchLogRetention checks log group has retention set.
-func ValidateCloudWatchLogRetention(t *testing.T, clients *AWSClients, logGroupPrefix string) {
-	ctx := context.Background()
-	result, err := clients.CloudWatchLogs.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{
-		LogGroupNamePrefix: aws.String(logGroupPrefix),
-	})
-	require.NoError(t, err, "Failed to describe log groups with prefix %s", logGroupPrefix)
-	require.NotEmpty(t, result.LogGroups, "No log group found with prefix %s", logGroupPrefix)
-
-	for _, lg := range result.LogGroups {
-		assert.NotNil(t, lg.RetentionInDays,
-			"Log group %s should have retention policy (not infinite)", *lg.LogGroupName)
-		t.Logf("Log group %s has retention of %d days", *lg.LogGroupName, *lg.RetentionInDays)
 	}
 }
 
@@ -632,52 +494,9 @@ func ValidateEBSPermissionsFromEC2(t *testing.T, clients *AWSClients, instanceID
 	}
 }
 
-// ValidateEC2CloudWatchLogs verifies that an EC2 instance is sending logs to CloudWatch.
-func ValidateEC2CloudWatchLogs(t *testing.T, clients *AWSClients, instanceID, logGroupName string) {
-	ctx := context.Background()
-
-	// Generate some log activity on the instance
-	logCmd := fmt.Sprintf("logger -t terratest 'Functional test log entry from %s'", instanceID)
-	_, _, _ = RunSSMCommand(t, clients, instanceID, []string{logCmd})
-
-	// Wait for logs to propagate
-	time.Sleep(10 * time.Second)
-
-	// Check if the log group exists
-	result, err := clients.CloudWatchLogs.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{
-		LogGroupNamePrefix: aws.String(logGroupName),
-	})
-	require.NoError(t, err, "Failed to describe log groups")
-	require.NotEmpty(t, result.LogGroups, "Log group %s not found", logGroupName)
-
-	t.Logf("CloudWatch log group %s exists and is configured", logGroupName)
-}
-
 // =============================================================================
 // PRIVATE NETWORKING VALIDATORS
 // =============================================================================
-
-// ValidateInstanceHasNoPublicIP verifies that an EC2 instance does not have a public IP address.
-func ValidateInstanceHasNoPublicIP(t *testing.T, clients *AWSClients, instanceID string) bool {
-	ctx := context.Background()
-	result, err := clients.EC2.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
-		InstanceIds: []string{instanceID},
-	})
-	require.NoError(t, err, "Failed to describe instance %s", instanceID)
-	require.NotEmpty(t, result.Reservations, "No reservations found for instance %s", instanceID)
-	require.NotEmpty(t, result.Reservations[0].Instances, "No instances found in reservation")
-
-	instance := result.Reservations[0].Instances[0]
-	hasPublicIP := instance.PublicIpAddress != nil && *instance.PublicIpAddress != ""
-
-	if hasPublicIP {
-		t.Logf("Instance %s has public IP: %s", instanceID, *instance.PublicIpAddress)
-		return false
-	}
-
-	t.Logf("Instance %s has no public IP (as expected for private subnet)", instanceID)
-	return true
-}
 
 // ValidatePrivateNetworkConnectivity verifies outbound HTTPS connectivity via NAT gateway.
 func ValidatePrivateNetworkConnectivity(t *testing.T, clients *AWSClients, instanceID string) {

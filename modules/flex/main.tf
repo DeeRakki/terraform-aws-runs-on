@@ -98,6 +98,7 @@ locals {
     otel_exporter_endpoint    = var.otel_exporter_endpoint
     otel_exporter_headers     = var.otel_exporter_headers
     otel_exporter_temporality = var.otel_exporter_temporality
+    otel_resource_attributes  = var.otel_resource_attributes
     otel_logs_enabled         = var.otel_logs_enabled
     otel_traces_enabled       = var.otel_traces_enabled
     logger_level              = var.logger_level
@@ -113,15 +114,18 @@ locals {
   }
 
   flex_operations = {
-    app_budget_daily_usd              = var.app_budget_daily_usd
-    enable_default_dashboard          = var.enable_default_dashboard
-    enable_cost_reports               = var.enable_cost_reports
-    spot_circuit_breaker              = var.spot_circuit_breaker
-    integration_step_security_api_key = var.integration_step_security_api_key
-    enable_admin_routes               = var.enable_admin_routes
-    enable_waf                        = var.enable_waf
-    public_ingress_web_acl_arn        = var.public_ingress_web_acl_arn
-    mandatory_extras                  = var.mandatory_extras
+    app_budget_daily_usd                       = var.app_budget_daily_usd
+    enable_default_dashboard                   = var.enable_default_dashboard
+    enable_cost_reports                        = var.enable_cost_reports
+    spot_circuit_breaker                       = var.spot_circuit_breaker
+    enable_warm_pools                          = var.enable_warm_pools
+    integration_step_security_api_key          = var.integration_step_security_api_key
+    enable_admin_routes                        = var.enable_admin_routes
+    enable_waf                                 = var.enable_waf
+    public_ingress_web_acl_arn                 = var.public_ingress_web_acl_arn
+    mandatory_extras                           = var.mandatory_extras
+    log_retention_days                         = var.log_retention_days
+    locks_table_point_in_time_recovery_enabled = var.locks_table_point_in_time_recovery_enabled
   }
 
   # Match the ECS environment merge and the runtime's boolean parsing so

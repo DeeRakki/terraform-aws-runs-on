@@ -16,7 +16,7 @@ resource "aws_secretsmanager_secret" "runs_on_stack_config" {
 
 resource "aws_cloudwatch_log_group" "stack_config_materializer" {
   name              = "/runs-on/${var.stack_name}/lambda/stack-config-materializer"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   tags = merge(
     local.common_tags,

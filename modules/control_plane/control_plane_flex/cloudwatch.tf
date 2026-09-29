@@ -29,6 +29,13 @@ resource "aws_budgets_budget" "app_daily_budget" {
     threshold_type            = "PERCENTAGE"
     subscriber_sns_topic_arns = [module.alerts.topic_arn]
   }
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.stack_name}-app-daily-budget"
+    }
+  )
 }
 
 ###########################

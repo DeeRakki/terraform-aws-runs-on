@@ -97,6 +97,7 @@ locals {
     RunnerCustomTags                   = join(",", local.runner.custom_tags)
     RunnerMaxRuntime                   = local.runner.max_runtime
     RunnerConfigAutoExtendsFrom        = local.runner.config_auto_extends_from
+    WarmPoolsDisabled                  = local.operations.enable_warm_pools ? "false" : "true"
     EbsEncryptionKey                   = local.runner.ebs_encryption_key_id
     AppGithubApiStrategy               = local.github.api_strategy
     AppTag                             = local.runtime.tag
@@ -138,6 +139,7 @@ locals {
       RUNS_ON_STACK_CONFIG_SECRET_VERSION = local.stack_config_secret_version
       OTEL_EXPORTER_OTLP_ENDPOINT         = local.runtime.otel_exporter_endpoint
       OTEL_EXPORTER_OTLP_TEMPORALITY      = local.runtime.otel_exporter_temporality
+      OTEL_RESOURCE_ATTRIBUTES            = local.runtime.otel_resource_attributes
       OTEL_LOGS_ENABLED                   = local.runtime.otel_logs_enabled ? "true" : "false"
       OTEL_TRACES_ENABLED                 = local.runtime.otel_traces_enabled ? "true" : "false"
       RUNS_ON_LOGGER_LEVEL                = local.runtime.logger_level
@@ -146,6 +148,11 @@ locals {
   )
 
   base_env_vars = { for k, v in local.all_env_vars : k => v if v != "" }
+}
+
+locals {
+  # Control-plane logs never keep less than the previous fixed 14 days.
+  control_plane_log_retention_days = max(14, local.operations.log_retention_days)
 }
 
 data "aws_partition" "current" {}
