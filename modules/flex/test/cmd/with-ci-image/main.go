@@ -201,8 +201,6 @@ func buildCIImage(repoRoot, tag string) (buildResult, error) {
 	return result, nil
 }
 
-type streamRunner func(repoRoot string, env []string, name string, args ...string) error
-
 func runStreaming(repoRoot string, env []string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = repoRoot

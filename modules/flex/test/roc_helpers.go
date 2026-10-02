@@ -45,7 +45,7 @@ func buildRocBinary(t *testing.T) string {
 	repoRoot := repoRootForTests(t)
 	outputPath := filepath.Join(t.TempDir(), "roc")
 
-	cmd := exec.Command("mise", "exec", "--", "go", "build", "-o", outputPath, ".")
+	cmd := exec.Command("mise", "exec", "go", "--", "go", "build", "-o", outputPath, ".")
 	cmd.Dir = filepath.Join(repoRoot, "cli")
 	cmd.Env = os.Environ()
 

@@ -29,7 +29,7 @@ The public Terraform input is `github_app_private_key`, but the rendered runtime
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.7.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.0 |
 
 ## Providers
@@ -85,7 +85,7 @@ The public Terraform input is `github_app_private_key`, but the rendered runtime
 | <a name="input_integration_step_security_api_key"></a> [integration\_step\_security\_api\_key](#input\_integration\_step\_security\_api\_key) | API key for StepSecurity integration forwarded to runner agents | `string` | n/a | yes |
 | <a name="input_network"></a> [network](#input\_network) | Shared runner networking resources | <pre>object({<br/>    vpc_id             = string<br/>    private_mode       = string<br/>    public_subnet_ids  = list(string)<br/>    private_subnet_ids = list(string)<br/>    security_group_ids = list(string)<br/>  })</pre> | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | AWS region | `string` | n/a | yes |
-| <a name="input_runtime"></a> [runtime](#input\_runtime) | Fleet ECS runtime settings | <pre>object({<br/>    image                     = string<br/>    size                      = string<br/>    capacity_provider         = string<br/>    maintenance_mode          = bool<br/>    log_retention_days        = number<br/>    otel_exporter_endpoint    = string<br/>    otel_exporter_headers     = string<br/>    otel_exporter_temporality = string<br/>    otel_logs_enabled         = bool<br/>    otel_traces_enabled       = bool<br/>    extra_env_vars            = map(string)<br/>  })</pre> | n/a | yes |
+| <a name="input_runtime"></a> [runtime](#input\_runtime) | Fleet ECS runtime settings | <pre>object({<br/>    image                     = string<br/>    size                      = string<br/>    capacity_provider         = string<br/>    maintenance_mode          = bool<br/>    log_retention_days        = number<br/>    otel_exporter_endpoint    = string<br/>    otel_exporter_headers     = string<br/>    otel_exporter_temporality = string<br/>    otel_resource_attributes  = optional(string, "")<br/>    otel_logs_enabled         = bool<br/>    otel_traces_enabled       = bool<br/>    extra_env_vars            = map(string)<br/>  })</pre> | n/a | yes |
 | <a name="input_stack_name"></a> [stack\_name](#input\_stack\_name) | Fleet stack name | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to Fleet resources | `map(string)` | n/a | yes |
 | <a name="input_diagnostic_settings"></a> [diagnostic\_settings](#input\_diagnostic\_settings) | Non-sensitive stack settings exposed by the job diagnostics resolver | `any` | `{}` | no |

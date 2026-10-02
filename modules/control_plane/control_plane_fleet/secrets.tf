@@ -1,6 +1,6 @@
 resource "aws_cloudwatch_log_group" "config_materializer" {
   name              = "/runs-on/${var.stack_name}/lambda/fleet-config-materializer"
-  retention_in_days = 14
+  retention_in_days = local.lambda_log_retention_days
   tags              = var.tags
 }
 

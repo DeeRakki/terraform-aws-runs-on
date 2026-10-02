@@ -3,7 +3,7 @@
 
 resource "aws_cloudwatch_log_group" "public_ingress_lambda" {
   name              = "/runs-on/${var.stack_name}/lambda/public-ingress"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   tags = merge(
     local.common_tags,
@@ -16,7 +16,7 @@ resource "aws_cloudwatch_log_group" "public_ingress_lambda" {
 resource "aws_cloudwatch_log_group" "github_apps_setup_lambda" {
   count             = local.admin_routes_enabled ? 1 : 0
   name              = "/runs-on/${var.stack_name}/lambda/github-apps-setup"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   tags = merge(
     local.common_tags,

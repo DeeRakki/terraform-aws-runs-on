@@ -19,7 +19,7 @@ variable "stack_name" {
 }
 
 variable "environment" {
-  description = "Environment name used for resource tagging and RunsOn job filtering. RunsOn will only process jobs with an 'env' label matching this value. See https://runs-on.com/configuration/environments/ for details."
+  description = "Environment name used for resource tagging and RunsOn job filtering. RunsOn will only process jobs with an 'env' label matching this value. See https://runs-on.com/docs/control-plane/environments/ for details."
   type        = string
   default     = "production"
 }
@@ -168,6 +168,12 @@ variable "cache_bucket_versioning_enabled" {
   default     = false
 }
 
+variable "locks_table_point_in_time_recovery_enabled" {
+  description = "Enable DynamoDB point-in-time recovery on the locks table. Its rows are transient and expire through TTL, so this only helps satisfy policies that require PITR on every table, at extra storage cost."
+  type        = bool
+  default     = false
+}
+
 variable "force_destroy_buckets" {
   description = "Allow S3 buckets to be destroyed even when not empty. Set to false for production environments to prevent accidental data loss."
   type        = bool
@@ -180,7 +186,7 @@ variable "force_destroy_buckets" {
 ###########################
 
 variable "log_retention_days" {
-  description = "Number of days to retain CloudWatch logs for EC2 instances"
+  description = "Number of days to retain CloudWatch logs. Runner instance logs use this value as is; control-plane and Lambda logs keep at least 14 days."
   type        = number
   default     = 7
 
@@ -216,14 +222,14 @@ variable "ebs_encryption_key_id" {
 variable "app_image" {
   description = "Container image for the RunsOn worker service. Published module releases inject a pinned public default during mirror publication."
   type        = string
-  default     = "public.ecr.aws/c5h5o9k1/runs-on/runs-on:v3.3.2@sha256:53df89ebc3396f87b88790807fe6be04b01242bad0c52122fab9795690d18533"
+  default     = "public.ecr.aws/c5h5o9k1/runs-on/runs-on:v3.4.0@sha256:08c80b917f9c3e7e3968e2e030ced82b2fd5319b03679339484c2debeb4c6eb5"
   nullable    = false
 }
 
 variable "app_tag" {
   description = "Application version tag for RunsOn service. Published module releases inject the released default during mirror publication."
   type        = string
-  default     = "v3.3.2"
+  default     = "v3.4.0"
   nullable    = false
 }
 
@@ -392,6 +398,12 @@ variable "spot_circuit_breaker" {
   default     = "2/15/30"
 }
 
+variable "enable_warm_pools" {
+  description = "Whether this stack keeps warm pool instances. When false, jobs with a pool= label still run on this stack, on a newly launched instance."
+  type        = bool
+  default     = true
+}
+
 ###########################
 # Monitoring & Budgets
 # Used by: core module
@@ -443,6 +455,12 @@ variable "otel_exporter_temporality" {
     condition     = contains(["cumulative", "delta"], var.otel_exporter_temporality)
     error_message = "OTLP temporality must be one of: cumulative, delta."
   }
+}
+
+variable "otel_resource_attributes" {
+  description = "Extra OTLP resource attributes as comma-separated key=value pairs, set as OTEL_RESOURCE_ATTRIBUTES. They override RunsOn defaults such as deployment.environment, except service.name. (optional)"
+  type        = string
+  default     = ""
 }
 
 variable "otel_logs_enabled" {

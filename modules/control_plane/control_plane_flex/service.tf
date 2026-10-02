@@ -136,7 +136,7 @@ module "runtime" {
   extra_task_role_statements      = local.flex_control_plane_extra_policy_statements
   task_role_managed_policy_arns   = compact(local.runtime.custom_policy_arns)
   log_group_name                  = local.worker_log_group_name
-  log_retention_days              = 14
+  log_retention_days              = local.control_plane_log_retention_days
   cpu                             = local.app_size_config.cpu
   memory                          = local.app_size_config.memory
   desired_count                   = local.runtime.maintenance_mode ? 0 : 1

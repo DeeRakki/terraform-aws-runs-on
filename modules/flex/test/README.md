@@ -31,6 +31,8 @@ Plan-only tests are expected to be fast and deterministic. The Go harness initia
 
 Apply-based smoke scenarios and the end-to-end GitHub integration test need AWS credentials and the scenario environment variables described in the test harness. Those runs are intentionally serialized because they are long-lived, quota-sensitive, and operate against real cloud resources.
 
+Set `TERRATEST_STATE_BUCKET` to keep each root's OpenTofu state in S3 at `terratest/<owner>/<stack>/<root>.tfstate`, where `<owner>` is `<run-id>/<job>` in GitHub Actions and `local` elsewhere. The test destroys its stack from `t.Cleanup`, which never runs when the process dies (cancellation, `go test` timeout panic, OOM kill, lost runner). With the state in S3, `tools/terratest-janitor` can still destroy the stack; without it, an interrupted local run leaks the whole stack.
+
 Live apply scenarios also need a real GitHub organization source for license validation. Set `GITHUB_ORG` directly, or set `RUNS_ON_TEST_REPO` to an `owner/repo` value so the harness can use the repository owner. The harness fails before deploy when neither value is set.
 
 ## CI Integration
@@ -50,6 +52,7 @@ That CI job exports these required environment variables into the Terratest proc
 - `GITHUB_APP_CLIENT_ID`
 - `GITHUB_APP_CLIENT_SECRET`
 - `GITHUB_TOKEN` (optional, preferred for GitHub Actions API access in CI)
+- `TERRATEST_STATE_BUCKET` (`runs-on-ci`; the job's `always()` cleanup step and the hourly `Terraform / Janitor` workflow destroy leaked stacks from it)
 
 `RUNS_ON_TEST_REPO` points at this repository. In CI we dispatch `.github/workflows/terraform-integration-runner.yml` from the current branch so the workflow definition stays in sync with any integration-harness changes in the same branch while still exercising a single RunsOn-managed job end to end. `RUNS_ON_TEST_WORKFLOW_REF` and `RUNS_ON_TEST_WORKFLOW_INPUTS` let callers override the dispatch target when they need a different workflow or inputs. When `GITHUB_TOKEN` is available, the harness prefers it for workflow dispatch, run polling, and log downloads because GitHub App installation tokens can have different Actions API access.
 

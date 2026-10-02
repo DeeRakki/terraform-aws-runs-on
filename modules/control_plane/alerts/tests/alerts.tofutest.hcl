@@ -61,6 +61,7 @@ run "slack_and_budget_alerts" {
   variables {
     slack_webhook_url       = "https://hooks.slack.com/services/example"
     allow_budgets_publish   = true
+    log_retention_days      = 365
     permission_boundary_arn = "arn:aws:iam::123456789012:policy/RequiredBoundary"
   }
 
@@ -82,7 +83,7 @@ run "slack_and_budget_alerts" {
   assert {
     condition = (
       aws_cloudwatch_log_group.slack_webhook[0].name == "/runs-on/test-plan/lambda/slack-webhook" &&
-      aws_cloudwatch_log_group.slack_webhook[0].retention_in_days == 14 &&
+      aws_cloudwatch_log_group.slack_webhook[0].retention_in_days == 365 &&
       try(aws_cloudwatch_log_group.slack_webhook[0].kms_key_id, null) == null &&
       aws_lambda_function.slack_webhook[0].logging_config[0].log_group == aws_cloudwatch_log_group.slack_webhook[0].name
     )

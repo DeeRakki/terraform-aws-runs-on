@@ -31,6 +31,12 @@ variable "allow_budgets_publish" {
   default     = false
 }
 
+variable "log_retention_days" {
+  description = "CloudWatch Logs retention in days for the Slack webhook Lambda."
+  type        = number
+  default     = 14
+}
+
 variable "permission_boundary_arn" {
   description = "Optional IAM permissions boundary ARN applied to alerting roles"
   type        = string

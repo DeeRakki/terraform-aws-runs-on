@@ -245,7 +245,7 @@ variable "tags" {
 variable "runtime_image" {
   description = "RunsOn worker image containing the fleetd binary. Override with a runs-on-ci image for live validation. Passing null falls back to the default, which release publication pins to the released image."
   type        = string
-  default     = "public.ecr.aws/c5h5o9k1/runs-on/runs-on:v3.3.2@sha256:53df89ebc3396f87b88790807fe6be04b01242bad0c52122fab9795690d18533"
+  default     = "public.ecr.aws/c5h5o9k1/runs-on/runs-on:v3.4.0@sha256:08c80b917f9c3e7e3968e2e030ced82b2fd5319b03679339484c2debeb4c6eb5"
   nullable    = false
 }
 
@@ -284,6 +284,12 @@ variable "otel_exporter_temporality" {
     condition     = contains(["cumulative", "delta"], var.otel_exporter_temporality)
     error_message = "OTLP temporality must be one of: cumulative, delta."
   }
+}
+
+variable "otel_resource_attributes" {
+  description = "Extra OTLP resource attributes as comma-separated key=value pairs, set as OTEL_RESOURCE_ATTRIBUTES. They override RunsOn defaults such as deployment.environment, except service.name. (optional)"
+  type        = string
+  default     = ""
 }
 
 variable "otel_logs_enabled" {
@@ -335,7 +341,7 @@ variable "bootstrap_tag" {
 variable "app_tag" {
   description = "Application/agent tag published into the cache bucket and passed to runners. Passing null falls back to the default, which release publication pins to the released version."
   type        = string
-  default     = "v3.3.2"
+  default     = "v3.4.0"
   nullable    = false
 }
 
@@ -428,7 +434,7 @@ variable "ecr_pull_through_cache_rules" {
 }
 
 variable "log_retention_days" {
-  description = "CloudWatch Logs retention in days."
+  description = "CloudWatch Logs retention in days. Control-plane Lambda logs keep at least 14 days."
   type        = number
   default     = 7
 

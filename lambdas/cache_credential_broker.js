@@ -61,7 +61,7 @@ async function handler(event) {
   const token = await validateRuntimeToken(input.runtime_token);
   const ac = normalizeAccessControls(token.payload.ac);
   // The cache prefix is a pure function of the GitHub-signed token: the same
-  // signature that authorizes the ac scopes carries the repository IDs, so a
+  // signature that authorizes the ac scopes carries the repository ID, so a
   // token can only ever mint credentials into its own repository's prefix.
   const { ownerID, repoID } = tokenRepositoryIDs(token.payload);
   const repository = repositoryPath(ownerID, repoID);
@@ -318,21 +318,37 @@ function instanceIDFromCallerUserID(userID) {
   return normalizeRoleSessionName(userID.slice(userID.lastIndexOf(':') + 1));
 }
 
+// unassertedOwnerID is the owner segment for tokens without a
+// repository_owner_id claim. GitHub IDs are positive, so it never collides
+// with a real owner's prefix.
+const unassertedOwnerID = 0;
+
 // tokenRepositoryIDs extracts the GitHub numeric repository and owner
-// identifiers from a validated runtime token payload. GitHub mints
-// repository_id / repository_owner_id as decimal-string claims (per the
-// committed fixtures in test/fixtures/runtime-token-claims). Both are
-// required: the signed IDs are the sole scoping authority, so a token
-// without them cannot mint scoped credentials.
+// identifiers from a validated runtime token payload. GitHub mints them as
+// decimal-string claims (test/fixtures/runtime-token-claims). repository_id
+// is required and is the isolation key: repository IDs are unique and never
+// reused within an issuer, and this broker trusts exactly one issuer. The
+// owner only namespaces the prefix. GHE.com (data residency) tokens omit
+// repository_owner_id (their owner_id is the repository's node ID), so those
+// tokens use unassertedOwnerID; a present but malformed claim still fails
+// closed.
 function tokenRepositoryIDs(payload) {
+  const repoID = requiredNumericClaim(payload.repository_id, 'repository_id');
+  if (claimMissing(payload.repository_owner_id)) {
+    return { ownerID: unassertedOwnerID, repoID };
+  }
   return {
     ownerID: requiredNumericClaim(payload.repository_owner_id, 'repository_owner_id'),
-    repoID: requiredNumericClaim(payload.repository_id, 'repository_id'),
+    repoID,
   };
 }
 
+function claimMissing(raw) {
+  return raw === undefined || raw === null || raw === '';
+}
+
 function requiredNumericClaim(raw, name) {
-  if (raw === undefined || raw === null || raw === '') {
+  if (claimMissing(raw)) {
     throw new Error(`runtime token has no ${name} claim`);
   }
   const value = Number(raw);
@@ -345,10 +361,11 @@ function requiredNumericClaim(raw, name) {
 // repositoryPath is the {ownerId}/{repoId} pair used in scoped prefixes and
 // the STS session tag. IDs are immutable, so the layout is rename-proof.
 function repositoryPath(ownerID, repoID) {
-  for (const [name, value] of [['owner id', ownerID], ['repository id', repoID]]) {
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      throw new Error(`repository ${name} is invalid`);
-    }
+  if (!Number.isSafeInteger(ownerID) || ownerID < unassertedOwnerID) {
+    throw new Error('repository owner id is invalid');
+  }
+  if (!Number.isSafeInteger(repoID) || repoID <= 0) {
+    throw new Error('repository id is invalid');
   }
   return `${ownerID}/${repoID}`;
 }

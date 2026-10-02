@@ -154,6 +154,7 @@ variable "runtime" {
     otel_exporter_endpoint    = string
     otel_exporter_headers     = string
     otel_exporter_temporality = string
+    otel_resource_attributes  = optional(string, "")
     otel_logs_enabled         = bool
     otel_traces_enabled       = bool
     logger_level              = string
@@ -179,6 +180,7 @@ variable "operations" {
     enable_default_dashboard          = optional(bool, true)
     enable_cost_reports               = optional(string, "daily")
     spot_circuit_breaker              = string
+    enable_warm_pools                 = optional(bool, true)
     integration_step_security_api_key = string
     enable_admin_routes               = bool
     enable_waf                        = bool
@@ -186,6 +188,10 @@ variable "operations" {
     # Opt-in: runner extras (e.g. s3-cache, otel) that are always enabled for
     # every runner, regardless of label or repo config overrides.
     mandatory_extras = optional(list(string), [])
+    # CloudWatch Logs retention for control-plane and Lambda log groups.
+    # Values below 14 keep 14 days.
+    log_retention_days                         = optional(number, 14)
+    locks_table_point_in_time_recovery_enabled = optional(bool, false)
   })
 
   validation {
