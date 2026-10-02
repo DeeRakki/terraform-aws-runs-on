@@ -82,6 +82,7 @@ locals {
     otel_exporter_endpoint    = var.otel_exporter_endpoint
     otel_exporter_headers     = var.otel_exporter_headers
     otel_exporter_temporality = var.otel_exporter_temporality
+    otel_resource_attributes  = var.otel_resource_attributes
     otel_logs_enabled         = var.otel_logs_enabled
     otel_traces_enabled       = var.otel_traces_enabled
     extra_env_vars            = var.extra_env_vars

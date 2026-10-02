@@ -91,7 +91,7 @@ resource "aws_cloudwatch_log_group" "slack_webhook" {
   count = local.slack_webhook_enabled ? 1 : 0
 
   name              = "/runs-on/${var.stack_name}/lambda/slack-webhook"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
 
   tags = merge(
     var.tags,

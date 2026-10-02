@@ -1,7 +1,6 @@
 package validationimage
 
 import (
-	"os"
 	"testing"
 )
 
@@ -103,9 +102,11 @@ func TestRequiredEnvVarsWithCIImageOmitsImageVars(t *testing.T) {
 }
 
 func TestMissingEnvVars(t *testing.T) {
-	t.Setenv("RUNS_ON_LICENSE_KEY", "set")
+	// A fixed environment: CI jobs set some of these variables. A blank value
+	// counts as missing.
+	env := map[string]string{"RUNS_ON_LICENSE_KEY": "set", "RUNS_ON_APP_TAG": " "}
 
-	missing := MissingEnvVars([]string{"RUNS_ON_LICENSE_KEY", "RUNS_ON_APP_IMAGE", "RUNS_ON_APP_TAG"}, os.Getenv)
+	missing := MissingEnvVars([]string{"RUNS_ON_LICENSE_KEY", "RUNS_ON_APP_IMAGE", "RUNS_ON_APP_TAG"}, func(name string) string { return env[name] })
 	if len(missing) != 2 {
 		t.Fatalf("MissingEnvVars() len = %d, want 2 (%v)", len(missing), missing)
 	}

@@ -209,6 +209,7 @@ variables {
     enable_admin_routes               = true
     enable_waf                        = false
     public_ingress_web_acl_arn        = ""
+    log_retention_days                = 7
   }
 
   tags = {}
@@ -513,7 +514,12 @@ run "lambda_log_groups_use_stack_namespace" {
       aws_cloudwatch_log_group.stack_config_materializer.retention_in_days == 14,
       aws_cloudwatch_log_group.job_diagnostics_resolver.retention_in_days == 14,
     ])
-    error_message = "Flex Lambda log groups should retain logs for 14 days."
+    error_message = "Flex Lambda log groups should keep 14 days when log_retention_days is shorter."
+  }
+
+  assert {
+    condition     = aws_dynamodb_table.locks.point_in_time_recovery[0].enabled == false
+    error_message = "The transient locks table should keep PITR off by default."
   }
 
   assert {
@@ -536,6 +542,41 @@ run "lambda_log_groups_use_stack_namespace" {
       aws_lambda_function.job_diagnostics_resolver.logging_config[0].log_group == aws_cloudwatch_log_group.job_diagnostics_resolver.name,
     ])
     error_message = "Flex Lambda functions should write to their managed log groups."
+  }
+}
+
+run "longer_log_retention_and_locks_pitr_opt_in" {
+  command = plan
+
+  variables {
+    operations = {
+      app_budget_daily_usd                       = 0
+      enable_cost_reports                        = "no"
+      spot_circuit_breaker                       = ""
+      integration_step_security_api_key          = ""
+      enable_admin_routes                        = true
+      enable_waf                                 = false
+      public_ingress_web_acl_arn                 = ""
+      log_retention_days                         = 365
+      locks_table_point_in_time_recovery_enabled = true
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      aws_cloudwatch_log_group.public_ingress_lambda.retention_in_days == 365,
+      aws_cloudwatch_log_group.github_apps_setup_lambda[0].retention_in_days == 365,
+      aws_cloudwatch_log_group.github_runner_cache_refresh_lambda.retention_in_days == 365,
+      aws_cloudwatch_log_group.stack_config_materializer.retention_in_days == 365,
+      aws_cloudwatch_log_group.job_diagnostics_resolver.retention_in_days == 365,
+      aws_cloudwatch_log_group.cache_credential_broker_lambda.retention_in_days == 365,
+    ])
+    error_message = "Flex Lambda log groups should follow a log_retention_days longer than 14."
+  }
+
+  assert {
+    condition     = aws_dynamodb_table.locks.point_in_time_recovery[0].enabled == true
+    error_message = "The locks table should enable PITR when requested."
   }
 }
 
@@ -730,6 +771,28 @@ run "cache_isolation_enabled_deploys_broker" {
   assert {
     condition     = local.stack_config_base.CacheCredentialBrokerFunctionName == "test-plan-cache-broker"
     error_message = "Stack config should carry the broker function name so runners request brokered credentials."
+  }
+}
+
+run "disabled_warm_pools_reach_stack_config" {
+  command = plan
+
+  variables {
+    operations = {
+      app_budget_daily_usd              = 0
+      enable_cost_reports               = "no"
+      spot_circuit_breaker              = ""
+      enable_warm_pools                 = false
+      integration_step_security_api_key = ""
+      enable_admin_routes               = true
+      enable_waf                        = false
+      public_ingress_web_acl_arn        = ""
+    }
+  }
+
+  assert {
+    condition     = local.stack_config_base.WarmPoolsDisabled == "true"
+    error_message = "enable_warm_pools = false should tell the worker to keep no warm pool instances."
   }
 }
 

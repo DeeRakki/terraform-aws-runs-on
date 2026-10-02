@@ -20,6 +20,11 @@ resource "aws_dynamodb_table" "locks" {
     attribute_name = "expiresAt"
   }
 
+  # Off by default: lock rows are transient and expire through TTL.
+  point_in_time_recovery {
+    enabled = local.operations.locks_table_point_in_time_recovery_enabled
+  }
+
   tags = merge(
     local.common_tags,
     {

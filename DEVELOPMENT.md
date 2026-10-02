@@ -39,7 +39,7 @@ make test-plan    # Free Terratest plan checks
 
 ## Testing
 
-Tests in [`test/`](./test) use Terratest and deploy real AWS infrastructure. See [`test/README.md`](./test/README.md) for required environment variables, scenario costs, and cleanup expectations.
+Tests in [`modules/flex/test/`](./modules/flex/test) use Terratest and deploy real AWS infrastructure. See [`modules/flex/test/README.md`](./modules/flex/test/README.md) for required environment variables, scenario costs, and cleanup expectations.
 
 Useful targets:
 
@@ -52,8 +52,6 @@ make test-full-ci-image
 make test-full
 make test-integration-ci-image
 make test-integration
-make test-short
-make test-all
 ```
 
 - `make test-*-ci-image` builds and pushes a fresh `runs-on-ci` image, exports `RUNS_ON_APP_IMAGE` and `RUNS_ON_APP_TAG`, then runs the underlying Terratest target.

@@ -345,6 +345,39 @@ func copyTerraformRoot(t *testing.T, prefix string) string {
 	return terraformRoot
 }
 
+// useRemoteState keeps a root's state in TERRATEST_STATE_BUCKET when set.
+// t.Cleanup never runs when the test process dies (cancellation, go test
+// timeout panic, OOM kill, lost runner); with the state in S3,
+// tools/terratest-janitor can still destroy the stack.
+func useRemoteState(t *testing.T, options *terraform.Options, stackName, root string) {
+	t.Helper()
+
+	bucket := strings.TrimSpace(os.Getenv("TERRATEST_STATE_BUCKET"))
+	if bucket == "" {
+		return
+	}
+	backend := []byte("terraform {\n  backend \"s3\" {}\n}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(options.TerraformDir, "terratest_backend.tf"), backend, 0o600))
+	options.BackendConfig = map[string]any{
+		"bucket": bucket,
+		"key":    terratestStateKey(stackName, root),
+		"region": GetAWSRegion(),
+	}
+}
+
+// terratestStateKey is the layout terratest-janitor parses:
+// terratest/<owner>/<stack>/<root>.tfstate. In CI the owner is
+// <run-id>/<job>, so a job's cleanup step reclaims exactly its own stacks.
+func terratestStateKey(stackName, root string) string {
+	owner := "local"
+	runID := strings.TrimSpace(os.Getenv("GITHUB_RUN_ID"))
+	job := strings.TrimSpace(os.Getenv("GITHUB_JOB"))
+	if runID != "" && job != "" {
+		owner = runID + "/" + job
+	}
+	return fmt.Sprintf("terratest/%s/%s/%s.tfstate", owner, stackName, root)
+}
+
 func newScenarioPaths(t *testing.T) terraformTestPaths {
 	t.Helper()
 
@@ -371,6 +404,7 @@ func deployScenario(t *testing.T, cfg ScenarioConfig) ScenarioResult {
 		Vars:            cfg.ToVPCVars(),
 		NoColor:         true,
 	}
+	useRemoteState(t, vpcOptions, cfg.StackName(), "vpc")
 	t.Cleanup(func() {
 		destroyScenario(t, "VPC", vpcOptions)
 	})
@@ -388,6 +422,7 @@ func deployScenario(t *testing.T, cfg ScenarioConfig) ScenarioResult {
 		EnvVars:         cfg.ToModuleEnvVars(),
 		NoColor:         true,
 	}
+	useRemoteState(t, moduleOptions, cfg.StackName(), "module")
 	t.Cleanup(func() {
 		destroyScenario(t, "module", moduleOptions)
 	})
@@ -887,7 +922,7 @@ func WaitForWorkflowCompletion(t *testing.T, client *github.Client, repo string,
 }
 
 // WatchForWorkflowRun watches for workflow_dispatch runs of a specific workflow file.
-func WatchForWorkflowRun(t *testing.T, client *github.Client, repo, workflowFile, testID, expectedStackEnv, expectedRef string, startTime time.Time, timeout time.Duration) (int64, error) {
+func WatchForWorkflowRun(t *testing.T, client *github.Client, repo, workflowFile, expectedStackEnv, expectedRef string, startTime time.Time, timeout time.Duration) (int64, error) {
 	owner, repoName, err := parseRepo(repo)
 	if err != nil {
 		return 0, fmt.Errorf("invalid repo format: %w", err)
@@ -896,18 +931,11 @@ func WatchForWorkflowRun(t *testing.T, client *github.Client, repo, workflowFile
 	ctx := context.Background()
 	deadline := time.Now().Add(timeout)
 	pollInterval := 15 * time.Second
-	abortFile := fmt.Sprintf("/tmp/runson-%s-abort", testID)
 	var latestRuns []*github.WorkflowRun
 
 	t.Logf("Watching for workflow_dispatch runs of %s (timeout: %v)", workflowFile, timeout)
-	t.Logf("To abort gracefully: touch %s", abortFile)
 
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(abortFile); err == nil {
-			os.Remove(abortFile)
-			return 0, fmt.Errorf("test aborted by user (detected %s)", abortFile)
-		}
-
 		runs, _, err := client.Actions.ListRepositoryWorkflowRuns(
 			ctx, owner, repoName,
 			&github.ListWorkflowRunsOptions{
@@ -926,7 +954,7 @@ func WatchForWorkflowRun(t *testing.T, client *github.Client, repo, workflowFile
 				runID := run.GetID()
 				status := run.GetStatus()
 				t.Logf("Found workflow run %d (status: %s, created: %s, url: %s)",
-					runID, status, run.CreatedAt.Time.Format(time.RFC3339), run.GetHTMLURL())
+					runID, status, run.CreatedAt.Format(time.RFC3339), run.GetHTMLURL())
 				return runID, nil
 			}
 		}
@@ -950,7 +978,7 @@ func workflowRunMatches(run *github.WorkflowRun, workflowFile, expectedStackEnv,
 	if !workflowIdentifierMatches(run.GetPath(), workflowFile) && !workflowIdentifierMatches(run.GetName(), workflowFile) {
 		return false
 	}
-	if run.CreatedAt == nil || run.CreatedAt.Time.Before(startTime.Add(-2*time.Minute)) {
+	if run.CreatedAt == nil || run.CreatedAt.Before(startTime.Add(-2*time.Minute)) {
 		return false
 	}
 	if expectedStackEnv != "" && !strings.Contains(run.GetDisplayTitle(), expectedStackEnv) && !strings.Contains(run.GetName(), expectedStackEnv) {
@@ -1001,7 +1029,7 @@ func logWorkflowRunCandidates(t *testing.T, runs []*github.WorkflowRun, workflow
 		}
 		created := ""
 		if run.CreatedAt != nil {
-			created = run.CreatedAt.Time.Format(time.RFC3339)
+			created = run.CreatedAt.Format(time.RFC3339)
 		}
 		t.Logf(
 			"run id=%d url=%s path=%s name=%q title=%q branch=%s sha=%s created=%s status=%s conclusion=%s",
@@ -1077,8 +1105,9 @@ func MonitorWorkflowJobStates(t *testing.T, client *github.Client, repo string, 
 
 // BootTimings holds timing data extracted from workflow job logs.
 type BootTimings struct {
-	TotalDuration     float64 // seconds, from "Timings - X.XXs" group header
-	AgentBootingTotal float64 // seconds, Total column on the agent-booting row
+	TotalDuration        float64 // seconds, from "Timings - X.XXs" group header
+	AgentBootingTotal    float64 // seconds, Total column on the agent-booting row
+	RunnerListeningTotal float64 // seconds, Total column on the runner-listening row
 }
 
 var (
@@ -1101,6 +1130,9 @@ func FetchJobLogs(t *testing.T, client *github.Client, repo string, runID int64)
 	})
 	require.NoError(t, err, "Failed to list workflow jobs for run %d", runID)
 
+	// Boot timings are informational; a stalled download must not hold the
+	// test until the go test timeout.
+	httpClient := &http.Client{Timeout: time.Minute}
 	logs := make(map[string]string)
 	for _, job := range jobs.Jobs {
 		jobName := job.GetName()
@@ -1110,7 +1142,7 @@ func FetchJobLogs(t *testing.T, client *github.Client, repo string, runID int64)
 			continue
 		}
 
-		resp, err := http.Get(logURL.String()) // #nosec G107 -- URL from GitHub API
+		resp, err := httpClient.Get(logURL.String()) // #nosec G107 -- URL from GitHub API
 		if err != nil {
 			t.Logf("Warning: failed to fetch logs for job %q: %v", jobName, err)
 			continue
@@ -1143,23 +1175,33 @@ func ParseBootTimings(logText string) *BootTimings {
 		}
 	}
 
-	// Find the agent-booting row and extract the Total column (last Xs value on the line)
-	for line := range strings.SplitSeq(logText, "\n") {
-		if strings.Contains(line, "agent-booting") {
-			matches := reTimingValue.FindAllStringSubmatch(line, -1)
-			if len(matches) > 0 {
-				last := matches[len(matches)-1]
-				if v, err := strconv.ParseFloat(last[1], 64); err == nil {
-					bt.AgentBootingTotal = v
-					found = true
-				}
-			}
-			break
-		}
+	if v, ok := timingRowTotal(logText, "agent-booting"); ok {
+		bt.AgentBootingTotal = v
+		found = true
+	}
+	if v, ok := timingRowTotal(logText, "runner-listening"); ok {
+		bt.RunnerListeningTotal = v
+		found = true
 	}
 
 	if !found {
 		return nil
 	}
 	return bt
+}
+
+// timingRowTotal returns the Total column (last Xs value on the line) of the
+// first timings row for step.
+func timingRowTotal(logText, step string) (float64, bool) {
+	for line := range strings.SplitSeq(logText, "\n") {
+		if strings.Contains(line, step) {
+			matches := reTimingValue.FindAllStringSubmatch(line, -1)
+			if len(matches) == 0 {
+				return 0, false
+			}
+			v, err := strconv.ParseFloat(matches[len(matches)-1][1], 64)
+			return v, err == nil
+		}
+	}
+	return 0, false
 }

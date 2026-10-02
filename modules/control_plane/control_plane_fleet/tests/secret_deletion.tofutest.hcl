@@ -286,7 +286,7 @@ run "fleet_config_secret_is_deleted_immediately" {
       try(aws_cloudwatch_log_group.config_materializer.kms_key_id, null) == null,
       try(aws_cloudwatch_log_group.job_diagnostics_resolver.kms_key_id, null) == null,
     ])
-    error_message = "Fleet Lambda log groups should use 14-day retention and default CloudWatch Logs encryption."
+    error_message = "Fleet Lambda log groups should keep 14 days when log_retention_days is shorter, with default CloudWatch Logs encryption."
   }
 
   assert {
@@ -295,6 +295,35 @@ run "fleet_config_secret_is_deleted_immediately" {
       aws_lambda_function.job_diagnostics_resolver.logging_config[0].log_group == aws_cloudwatch_log_group.job_diagnostics_resolver.name,
     ])
     error_message = "Fleet Lambda functions should write to their managed log groups."
+  }
+}
+
+run "lambda_log_groups_follow_longer_log_retention" {
+  command = plan
+
+  variables {
+    runtime = {
+      image                     = "public.ecr.aws/c5h5o9k1/runs-on/runs-on:test"
+      size                      = "small"
+      capacity_provider         = "FARGATE"
+      maintenance_mode          = false
+      log_retention_days        = 365
+      otel_exporter_endpoint    = ""
+      otel_exporter_headers     = ""
+      otel_exporter_temporality = "cumulative"
+      otel_logs_enabled         = true
+      otel_traces_enabled       = true
+      extra_env_vars            = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      aws_cloudwatch_log_group.config_materializer.retention_in_days == 365,
+      aws_cloudwatch_log_group.job_diagnostics_resolver.retention_in_days == 365,
+      aws_cloudwatch_log_group.cache_credential_broker_lambda.retention_in_days == 365,
+    ])
+    error_message = "Fleet Lambda log groups should follow a log_retention_days longer than 14."
   }
 }
 

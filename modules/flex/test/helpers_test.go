@@ -39,25 +39,19 @@ func TestGetTestIDLocalFormat(t *testing.T) {
 	}
 }
 
-func TestDefaultScenarioConfigSetsStableCleanupTags(t *testing.T) {
+// The janitor's run-scoped cleanup (tools/terratest-janitor) parses this
+// layout to find the stacks of one CI job.
+func TestTerratestStateKeyScopesCIStacksToTheirJob(t *testing.T) {
 	t.Setenv("GITHUB_RUN_ID", "24502906202")
-	t.Setenv("GITHUB_RUN_ATTEMPT", "2")
 	t.Setenv("GITHUB_JOB", "terraform-deploy-smoke")
+	if got, want := terratestStateKey("test-24502906202-82a60efe", "module"), "terratest/24502906202/terraform-deploy-smoke/test-24502906202-82a60efe/module.tfstate"; got != want {
+		t.Errorf("CI key = %q, want %q", got, want)
+	}
 
-	cfg := DefaultScenarioConfig()
-	tags := cfg.TestTags()
-
-	if tags["CreatedAt"] == "" {
-		t.Fatal("expected CreatedAt tag")
-	}
-	if tags["GithubRunId"] != "24502906202" {
-		t.Fatalf("GithubRunId = %q", tags["GithubRunId"])
-	}
-	if tags["GithubRunAttempt"] != "2" {
-		t.Fatalf("GithubRunAttempt = %q", tags["GithubRunAttempt"])
-	}
-	if tags["GithubJob"] != "terraform-deploy-smoke" {
-		t.Fatalf("GithubJob = %q", tags["GithubJob"])
+	t.Setenv("GITHUB_RUN_ID", "")
+	t.Setenv("GITHUB_JOB", "")
+	if got, want := terratestStateKey("test-1776289229-0a1b2c3d", "vpc"), "terratest/local/test-1776289229-0a1b2c3d/vpc.tfstate"; got != want {
+		t.Errorf("local key = %q, want %q", got, want)
 	}
 }
 

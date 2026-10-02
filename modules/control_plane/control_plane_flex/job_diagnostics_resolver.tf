@@ -1,6 +1,6 @@
 resource "aws_cloudwatch_log_group" "job_diagnostics_resolver" {
   name              = "/runs-on/${var.stack_name}/lambda/job-diagnostics-resolver"
-  retention_in_days = 14
+  retention_in_days = local.control_plane_log_retention_days
 
   # Older deployments depended on this group through the resolver's name in
   # stack config. Keep replacement ordering after that dependency is removed.
