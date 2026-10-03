@@ -158,6 +158,7 @@ variable "runtime" {
     otel_traces_enabled       = bool
     logger_level              = string
     extra_env_vars            = map(string)
+    container_insights        = optional(bool, true)
   })
 }
 
